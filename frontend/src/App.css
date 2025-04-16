@@ -1,0 +1,25 @@
+.container {
+  max-width: 1000px;
+  margin: auto;
+  padding: 20px;
+}
+
+input[type="file"] {
+  margin-right: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+table th,
+table td {
+  padding: 8px;
+  text-align: center;
+}
+
+table tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
