@@ -83,6 +83,27 @@ app.post('/', upload.fields([{ name: 'file1' }, { name: 'file2' }]), (req, res) 
     result.push(rowResult);
   });
 
+ const sheet2Map = new Map();
+sheet2.forEach(row => {
+  const key = `${row.STATE}_${row.PRODUCT}`;
+  sheet2Map.set(key, row);
+});
+
+sheet1.forEach(row1 => {
+  const key = `${row1.STATE}_${row1.PRODUCT}`;
+  const matchingRow = sheet2Map.get(key);
+
+  if (!matchingRow) {
+    const rowResult = {
+      ...row1,
+      type: "PREVIOUS",
+      changes: {},
+      highlight: true
+    };
+    result.push(rowResult);
+  }
+});
+
   // Sorting my result
   result.sort((a, b) => {
     const stateCompare = (a['STATE'] || '').localeCompare(b['STATE'] || '');
