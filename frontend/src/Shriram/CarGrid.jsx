@@ -285,19 +285,19 @@ function CarGrid() {
     </div>
 
     {/* Legend for color representation */}
-<div className="mb-4 px-4 py-3 bg-white rounded-md shadow text-sm flex flex-wrap gap-4 items-center justify-start border border-gray-200">
-<div className="flex items-center gap-2">
-  <div className="w-5 h-5 rounded" style={{ backgroundColor: "#D1FAE5" }}></div>
-  <span className="text-gray-700">New Row</span>
-</div>
-<div className="flex items-center gap-2">
-  <div className="w-5 h-5 rounded" style={{ backgroundColor: "#FECACA" }}></div>
-  <span className="text-gray-700">Previous Row</span>
-</div>
-<div className="flex items-center gap-2">
-  <div className="w-5 h-5 rounded" style={{ backgroundColor: "#FEF9C3" }}></div>
-  <span className="text-gray-700">Modified Cell</span>
-</div>
+    <div className="mb-4 px-4 py-3 bg-white rounded-md shadow text-sm flex flex-wrap gap-4 items-center justify-start border border-gray-200">
+  <div className="flex items-center gap-2">
+    <div className="w-5 h-5 rounded" style={{ backgroundColor: "#D1FAE5" }}></div>
+    <span className="text-gray-700">New Entery Added This Month</span>
+  </div>
+  <div className="flex items-center gap-2">
+    <div className="w-5 h-5 rounded" style={{ backgroundColor: "#FECACA" }}></div>
+    <span className="text-gray-700">Previous Month Entry </span>
+  </div>
+  <div className="flex items-center gap-2">
+    <div className="w-5 h-5 rounded" style={{ backgroundColor: "#FEF9C3" }}></div>
+    <span className="text-gray-700">Modified Cell</span>
+  </div>
 </div>
 
 

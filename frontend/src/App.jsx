@@ -13,6 +13,8 @@ function App() {
      <Routes>
         <Route path="/" element={<CarGrid />} />
         <Route path="/commercial" element={<CommercialGrid />} />
+        <Route path="/icici/new" element={<TW_NEW/>}/>
+        <Route path="/icici/old" element={<TW_OLD/>} />
       </Routes>
     </BrowserRouter>
   );

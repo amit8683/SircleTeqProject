@@ -21,132 +21,204 @@ exports.compareCommercialGrid = (file1, file2) => {
     PRODUCTS: "PRODUCT",
   };
 
-  // Normalization functions
-  const normalize = (str) => (str || "").toString().trim().toUpperCase();
+  const typoCorrectionMap = {
+    eeco: "ECCO",
+    delcined: "DECLINED",
+    declined: "DECLINED",
+    ncases: "NCB CASES",
+    stp: "STP",
+    suzuki: "SUZUKI",
+    maruti: "MARUTI",
+    hyundai: "HYUNDAI",
+    honda: "HONDA",
+    manufactur: "MANUFACTURE",
+    upto: "UP TO",
+    lacs: "LAKHS",
+    "/": " ",
+    "\\.": " ",
+    "\\bis\\b": " ",
+    "\\bdeclined\\b": "DECLINED",
+    "tamilnadu & pondicherry": "TAMILNADU",
+    tamilnadu: "TAMILNADU",
+    pondicherry: "TAMILNADU",
+    gujrat: "GUJARAT",
+    gujurat: "GUJARAT",
+    daman: "DAMAN AND DIU",
+    "uttaranchal-aa": "UTTARANCHAL-AA",
+    "uttaranchal-rsd": "UTTARANCHAL-RSD",
+    "punjab/chandigarh": "PUNJAB/CHANDIGARH",
+  };
 
-  const normalizeProduct = (product) => {
-    return (product || "")
+  // Enhanced normalization functions
+  const normalizeWithTypos = (str) => {
+    let normalized = (str || "").toString().trim().toUpperCase();
+    normalized = normalized
+      .replace(/[^A-Z0-9 ]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    Object.entries(typoCorrectionMap).forEach(([typo, correction]) => {
+      normalized = normalized.replace(
+        new RegExp(typo, "gi"),
+        correction.toUpperCase()
+      );
+    });
+    return normalized.replace(/\s+/g, " ").trim();
+  };
+
+  const normalizeProduct = (product = "") => {
+    return product
       .split(/and|,/i)
-      .map((p) => p.trim().replace(/\s+/g, " "))
-      .filter((p) => p)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
       .sort()
       .join(" and ")
       .toUpperCase();
   };
 
-  // Core comparison logic
-  const workbook1 = XLSX.readFile(file1);
-  const workbook2 = XLSX.readFile(file2);
+   const stateAliasMap = {
+    "PUNJAB/CHANDIGARH": "PUNJAB",
+    "J & K": "JAMMU AND KASHMIR",
+    "JAMMU AND KASHMIR": "JAMMU AND KASHMIR",
+    "GUJARAT DADRA NAGAR HAVELI DAMAN AND DIU DIU": "GUJARAT",
+    "GUJARAT AND DADRA AND NAGAR HAVELI AND DAMAN AND DIU": "GUJARAT",
+    GUJARAT: "GUJARAT",
+    "UTTARANCHAL-AA": "UTTARANCHAL-AA",
+    "UTTARANCHAL-RSD": "UTTARANCHAL-RSD",
+    "PUNJAB CHANDIGARH": "PUNJAB",
+    "TAMILNADU TAMILNADU": "TAMILNADU",
+    "MUMBAI GOA":"MUMBAI"
+  };
+  const normalizeState = (state) => {
+    let normalized = normalizeWithTypos(state);
+    return stateAliasMap[normalized] || normalized;
+  };
 
+  const processUWRemarks = (remarks) => {
+    return (remarks || "")
+      .toString()
+      .split(/and|,|\//i)
+      .map((term) => normalizeWithTypos(term))
+      .filter((term) => term.trim() !== "")
+      .sort()
+      .join(" ");
+  };
+
+  // Header processing
+  const extractHeaderInfo = (sheetRaw) => {
+    const norm = (s) => s?.toString().trim().replace(/\s+/g, "").toLowerCase();
+    
+    for (let i = 0; i < sheetRaw.length; i++) {
+      const row = sheetRaw[i];
+      const headerIndices = DESIRED_HEADERS.map((desired) => {
+        const desiredNorm = norm(desired);
+        let bestMatch = { rating: 0, index: -1 };
+
+        row.forEach((cell, idx) => {
+          const mapped = HEADER_ALIASES[normalizeWithTypos(cell)] || cell;
+          const rating = stringSimilarity.compareTwoStrings(
+            norm(mapped),
+            desiredNorm
+          );
+          if (rating > bestMatch.rating && rating > 0.7) {
+            bestMatch = { rating, index: idx };
+          }
+        });
+        return bestMatch.index;
+      });
+
+      if (headerIndices.every((idx) => idx !== -1)) {
+        return { headerRowIndex: i, headerIndices };
+      }
+    }
+    throw new Error("Header matching failed");
+  };
+
+  // Data processing
   const processSheet = (workbook) => {
     const sheetRaw = XLSX.utils.sheet_to_json(
       workbook.Sheets[workbook.SheetNames[0]],
       { header: 1 }
     );
 
-    // Find header row
-    let headerInfo;
-    for (let i = 0; i < sheetRaw.length; i++) {
-      const row = sheetRaw[i] || [];
-      const indices = DESIRED_HEADERS.map((desired) => {
-        const desiredNorm = desired.replace(/\s+/g, "").toLowerCase();
-        let best = { rating: 0, index: -1 };
-
-        row.forEach((cell, idx) => {
-          const cellValue = HEADER_ALIASES[normalize(cell)] || cell;
-          const similarity = stringSimilarity.compareTwoStrings(
-            desiredNorm,
-            normalize(cellValue).replace(/\s+/g, "").toLowerCase()
-          );
-
-          if (similarity > best.rating && similarity > 0.7) {
-            best = { rating: similarity, index: idx };
-          }
-        });
-        return best.index;
-      });
-
-      if (indices.every((idx) => idx !== -1)) {
-        headerInfo = { headerRowIndex: i, headerIndices: indices };
-        break;
-      }
-    }
-
-    if (!headerInfo) throw new Error("Header matching failed");
-
-    // Map rows to objects
-    return sheetRaw.slice(headerInfo.headerRowIndex + 1).map((row) => {
+    const { headerRowIndex, headerIndices } = extractHeaderInfo(sheetRaw);
+    
+    return sheetRaw.slice(headerRowIndex + 1).map((row) => {
       const obj = {};
       DESIRED_HEADERS.forEach((h, i) => {
-        obj[h] = (row[headerInfo.headerIndices[i]] ?? "").toString().trim();
+        obj[h] = (row[headerIndices[i]] ?? "").toString().trim();
       });
       return obj;
     });
   };
 
+  // Core comparison logic
+  const FUZZY_THRESHOLD = 0.90;
+  const workbook1 = XLSX.readFile(file1);
+  const workbook2 = XLSX.readFile(file2);
+
   const sheet1 = processSheet(workbook1);
   const sheet2 = processSheet(workbook2);
 
-  // Helper: Find best matching row from sheet1 based on STATE similarity
-  const findBestMatchingRow = (row2, sheet1) => {
-    let bestMatch = null;
-    let bestRating = 0;
-
-    for (const row1 of sheet1) {
-      const stateSim = stringSimilarity.compareTwoStrings(
-        normalize(row1.STATE),
-        normalize(row2.STATE)
-      );
-
-      const product1 = normalizeProduct(row1.PRODUCT);
-      const product2 = normalizeProduct(row2.PRODUCT);
-
-      const uwRemarks1 = normalize(row1["UW REMARKS"]);
-      const uwRemarks2 = normalize(row2["UW REMARKS"]);
-
-      if (
-        product1 === product2 &&
-        uwRemarks1 === uwRemarks2 &&
-        stateSim > 0.8
-      ) {
-        if (stateSim > bestRating) {
-          bestRating = stateSim;
-          bestMatch = row1;
-        }
-      }
-    }
-
-    return bestMatch;
+  const makeKey = (row) => {
+    return [
+      normalizeState(row.STATE),
+      normalizeProduct(row.PRODUCT),
+      normalizeWithTypos(row["DISC %"]).substring(0, 2),
+      normalizeWithTypos(row["POLICY TYPE"]).substring(0, 2),
+      normalizeWithTypos(row["AGE CONDITION"]).replace(/\D/g, "").substring(0, 2)
+    ].join("|");
   };
 
-  // Compare records
+  // Create mapping structure
+  const sheet1Map = new Map();
+  sheet1.forEach((row) => {
+    const key = makeKey(row);
+    if (!sheet1Map.has(key)) sheet1Map.set(key, []);
+    sheet1Map.get(key).push(row);
+  });
+
   const results = [];
-  const matchedSheet1Rows = new Set();
+  const matchedSheet1Keys = new Set();
 
+  // Compare sheet2 rows against sheet1
   sheet2.forEach((row2) => {
+    const key = makeKey(row2);
+    const possibleMatches = sheet1Map.get(key) || [];
+    let bestMatch = null;
+    let highestScore = 0;
+
+    const remarks2 = processUWRemarks(row2["UW REMARKS"]);
+    possibleMatches.forEach((row1) => {
+      const remarks1 = processUWRemarks(row1["UW REMARKS"]);
+      const score = stringSimilarity.compareTwoStrings(remarks1, remarks2);
+
+      if (score > highestScore && score >= FUZZY_THRESHOLD) {
+        highestScore = score;
+        bestMatch = row1;
+      }
+    });
+
     const result = { ...row2, type: "NEW", changes: {}, highlight: true };
-    const matchedRow1 = findBestMatchingRow(row2, sheet1);
-
-    if (matchedRow1) {
-      matchedSheet1Rows.add(matchedRow1);
-
+    
+    if (bestMatch) {
+      matchedSheet1Keys.add(makeKey(bestMatch));
       result.type = "UNCHANGED";
       result.highlight = false;
 
-      // Detect field changes
+      // Detect changes
       DESIRED_HEADERS.forEach((h) => {
         if (["STATE", "PRODUCT", "UW REMARKS"].includes(h)) return;
 
-        const val1 = normalize(matchedRow1[h]);
-        const val2 = normalize(row2[h]);
+        const val1 = normalizeWithTypos(bestMatch[h]);
+        const val2 = normalizeWithTypos(row2[h]);
 
         if (val1 !== val2) {
           result.type = "MODIFIED";
           result.highlight = true;
           result.changes[h] = {
-            old: matchedRow1[h],
+            old: bestMatch[h],
             new: row2[h],
-            highlight: true,
+            highlight: true
           };
         }
       });
@@ -155,32 +227,29 @@ exports.compareCommercialGrid = (file1, file2) => {
     results.push(result);
   });
 
-  // Find removed (PREVIOUS) entries
+  // Find removed entries
   sheet1.forEach((row1) => {
-    if (![...matchedSheet1Rows].includes(row1)) {
+    if (!matchedSheet1Keys.has(makeKey(row1))) {
       results.push({
         ...row1,
         type: "PREVIOUS",
         changes: {},
-        highlight: true,
+        highlight: true
       });
     }
   });
 
-  // Sort results
+  // Sorting
   results.sort((a, b) => {
-    const stateCompare = normalize(a.STATE).localeCompare(normalize(b.STATE));
-    return stateCompare !== 0
-      ? stateCompare
-      : normalizeProduct(a.PRODUCT).localeCompare(normalizeProduct(b.PRODUCT));
+    const stateCompare = normalizeState(a.STATE).localeCompare(normalizeState(b.STATE));
+    return stateCompare !== 0 ? stateCompare : 
+      normalizeProduct(a.PRODUCT).localeCompare(normalizeProduct(b.PRODUCT));
   });
 
   return {
     results,
-    headers: DESIRED_HEADERS,
-    changeHeaders: DESIRED_HEADERS.filter(
-      (h) => !["STATE", "PRODUCT", "UW REMARKS"].includes(h)
-    ),
+    headers: DESIRED_HEADERS
+
   };
 };
 
@@ -260,15 +329,14 @@ exports.compareCarGrid = (file1, file2) => {
     "PUNJAB/CHANDIGARH": "PUNJAB",
     "J & K": "JAMMU AND KASHMIR",
     "JAMMU AND KASHMIR": "JAMMU AND KASHMIR",
-    "GUJARAT & DADRA NAGAR HAVELI & DAMAN & DIU": "GUJARAT",
+    "GUJARAT DADRA NAGAR HAVELI DAMAN AND DIU DIU": "GUJARAT",
     "GUJARAT AND DADRA AND NAGAR HAVELI AND DAMAN AND DIU": "GUJARAT",
     GUJARAT: "GUJARAT",
     "UTTARANCHAL-AA": "UTTARANCHAL-AA",
     "UTTARANCHAL-RSD": "UTTARANCHAL-RSD",
-    "TAMILNADU & PONDICHERRY": "TAMILNADU",
-    "PUNJAB/CHANDIGARH": "PUNJAB",
-    PUNJAB: "PUNJAB",
-    TAMILNADU: "TAMILNADU",
+    "PUNJAB CHANDIGARH": "PUNJAB",
+    "TAMILNADU TAMILNADU": "TAMILNADU",
+    "MUMBAI GOA":"MUMBAI"
   };
   const normalizeState = (state) => {
     let normalized = normalizeWithTypos(state);
@@ -382,9 +450,6 @@ exports.compareCarGrid = (file1, file2) => {
         .replace(/\D/g, "")
         .substring(0, 2),
     ].join("|");
-    if(samllresult){
-      console.log(samllresult)
-    }
     return samllresult;
   };
 

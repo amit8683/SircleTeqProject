@@ -34,13 +34,22 @@ exports.compareNEW = (file1, file2) => {
 
   const normalizeCategory = (cat) => {
     const normalized = normalize(cat);
-    const replacements = { EMERGING: "EMG" };
+    const replacements = { "EMERGING": "EMG","NEW PMG":"PMG"};
     return replacements[normalized] || normalized;
   };
 
-  const normalizeLocation = (loc) => {
-    return normalize(loc).replace(/&/g, "AND");
-  };
+const normalizeLocation = (loc = "") => {
+    const knownFixes = {
+        "VISAKHAPATNAM": "VISAKHAPATNAM",
+        "VISHAKAPATTNAM": "VISAKHAPATNAM",
+        "VISHKAPATNAM": "VISAKHAPATNAM",
+        "VIZAG": "VISAKHAPATNAM" // if applicable
+    };
+
+    const upper = loc?.toUpperCase().trim().replace(/&/g, "AND") || "";
+    return knownFixes[upper] || upper;
+};
+
 
   const fuzzyFindKey = (targetKey, allKeys) => {
     const matches = stringSimilarity.findBestMatch(targetKey, allKeys);
@@ -48,10 +57,24 @@ exports.compareNEW = (file1, file2) => {
   };
 
   const extractHeaderIndices = (sheetRaw, headers) => {
+    const norm =(s)=>s?.toString().trim().replace(/\s+/g,"").toLowerCase();
     for (let i = 0; i < sheetRaw.length; i++) {
       const row = sheetRaw[i];
       if (!row || row.length === 0) continue;
-      const headerIndices = headers.map((h) => row.indexOf(h));
+      const headerIndices = headers.map((desired)=>{
+        const desiredNorm=norm(desired);
+        let bestMatch={rating:0,index:-1};
+        row.forEach((cell,idx)=>{
+          const mapped =cell;
+          const cellNorm =norm(mapped);
+          const rating = stringSimilarity.compareTwoStrings(cellNorm, desiredNorm);
+
+          if(rating>bestMatch.rating && rating>0.8){
+            bestMatch={rating,index:idx}
+          }
+        })
+        return bestMatch.index;
+      });
       const foundAll = headerIndices.every((index) => index !== -1);
       if (foundAll) return { headerRowIndex: i, headerIndices };
     }
@@ -69,7 +92,7 @@ exports.compareNEW = (file1, file2) => {
       headers.forEach((header, idx) => {
         let value = row[headerIndices[idx]];
         if (typeof value === "number") {
-          if (value === 0) {
+          if (value === 0||value<0) {
             value = "0%";
           } else if (value > 0 && value < 1) {
             value = Math.round(value * 100) + "%";
