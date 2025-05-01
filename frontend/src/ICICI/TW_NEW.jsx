@@ -22,7 +22,7 @@ function TW_NEW() {
     formData.append("file2", file2);
     
     try {
-      const res = await axios.post("http://localhost:5001/icici", formData);
+      const res = await axios.post("http://localhost:5001/icici/new", formData);
       
       setData(res.data.result.filter((row)=>row.hasOwnProperty("RTO Category")));
     } catch (error) {
